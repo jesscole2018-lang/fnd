@@ -65,7 +65,7 @@ grant select on public.allowed_users to authenticated;
 
 -- ===== Approved people (edit this list any time and re-run just these lines) =====
 insert into public.allowed_users (email, name, role) values
-  ('jessicac@corp-imaging.com', 'Jessica Cole', 'admin')
+  ('admin.email@example.com', 'Site Admin', 'admin')  -- replace with the admin's sign-in email
 on conflict (email) do update set name = excluded.name, role = excluded.role;
 
 -- Add reviewers like this (use their exact email, lowercase):
