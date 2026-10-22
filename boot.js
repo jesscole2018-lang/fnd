@@ -6,6 +6,8 @@
   const CFG = window.FND_CONFIG;
   const sb = window.supabase.createClient(CFG.supabaseUrl, CFG.supabaseKey, { auth: { persistSession: true, autoRefreshToken: true } });
   window.__sb = sb;
+  /* products with no store photo (e.g. new SKUs added by the daily refresh) show the logo instead of a broken image */
+  window.addEventListener('error', e => { const t = e.target; if (t && t.tagName === 'IMG' && !t.dataset.fb){ t.dataset.fb = '1'; t.src = 'brand/fnd_logo.png'; t.style.objectFit = 'contain'; t.style.padding = '18%'; t.alt = 'No photo in the store yet'; } }, true);
   const $g = id => document.getElementById(id);
   let me = null;            // { email, name, role }
 
