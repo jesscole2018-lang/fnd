@@ -43,7 +43,7 @@ const ostat=st=>ORDER_STATUS[st]||ORDER_STATUS.new;
 const sampleRequests = {};// requestId -> doc (from the shared decision log)
 try{ cart = JSON.parse(localStorage.getItem('fnd-samplecart')||'{}')||{}; }catch(e){ cart={}; }
 try{ shipto = JSON.parse(localStorage.getItem('fnd-shipto')||'{}')||{}; }catch(e){ shipto={}; }
-function saveCart(){ try{ localStorage.setItem('fnd-samplecart', JSON.stringify(cart)); }catch(e){} const n=Object.keys(cart).length; const p=document.getElementById('samplePill'); if(p) p.textContent=n; }
+function saveCart(){ try{ localStorage.setItem('fnd-samplecart', JSON.stringify(cart)); }catch(e){} const n=Object.keys(cart).length; const p=document.getElementById('samplePill'); if(p){ p.textContent=n; p.hidden=n<1; } }
 function inCart(id){ return !!cart[id]; }
 function toggleCart(it,size){ if(cart[it.id]) delete cart[it.id]; else cart[it.id]={size: size||'', addedAt:new Date().toISOString()}; saveCart(); }
 const SIZES=it=>{ if(!it.quote||!it.quote.ext) return null; const base=(it.quote.base||'').split('–'); const order=['XS','S','M','L','XL','2XL','3XL','4XL','5XL','6XL']; const a=order.indexOf(base[0]), b=order.indexOf(base[1]); const list=(a>=0&&b>=0)?order.slice(a,b+1):[]; return list.concat(it.quote.ext.map(e=>e[0])); };
@@ -174,7 +174,7 @@ document.addEventListener('click',e=>{ if(!e.target.closest('.tabdd')) document.
 document.addEventListener('keydown',e=>{ if(e.key==='Escape') document.querySelectorAll('.tabdd.open').forEach(x=>x.classList.remove('open')); });
 function renderProgress(){
   const total=ITEMS.length, done=ITEMS.filter(i=>decisions[i.id]&&decisions[i.id].status).length;
-  $('#progressText').textContent=`${done} of ${total} reviewed`; const pill=$('#progressPill'); if(pill) pill.textContent=done;
+  $('#progressText').textContent=`${done} of ${total} reviewed`; const pill=$('#progressPill'); if(pill){ pill.textContent=done; pill.hidden=done<1; }
 }
 
 /* ---------- brand catalog ---------- */
