@@ -1,4 +1,10 @@
-# Floor & Decor Merch Review
+# Floor & Decor Merch Review — moved
+
+This site now lives at [jesscole2018-lang.github.io](https://github.com/jesscole2018-lang/jesscole2018-lang.github.io)
+(the repo that actually owns the `cicmerchreview.com` domain), under `/FND`. `index.html` here is just a
+redirect so any link already sent to a reviewer keeps working. Make future changes there, not here.
+
+---
 
 Reviewer site prepared by CIC. Hosted on GitHub Pages; sign-in and saved decisions run on Supabase.
 
