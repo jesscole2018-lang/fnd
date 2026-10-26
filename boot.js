@@ -1,13 +1,16 @@
-/* Floor & Decor Merch Review — GitHub Pages boot.
-   Signs the reviewer in with Supabase, loads the private site data (items, prices, inventory) from the database,
-   and provides the small storage API the page was written against (claude.use('db'|'user'|'downloads')).
-   No pricing or inventory data lives in this repository; it is loaded only after an approved person signs in. */
+/* CIC Merch Review — GitHub Pages boot (shared by every client folder, e.g. /FND, /MOV).
+   Signs the reviewer in with Supabase, loads that client's private site data (items, prices, inventory)
+   from the database, and provides the small storage API the page was written against
+   (claude.use('db'|'user'|'downloads')).
+   No pricing or inventory data lives in this repository; it is loaded only after an approved person signs in,
+   and every row is scoped to CFG.client so one client's reviewers can never read another's data. */
 (function(){
-  const CFG = window.FND_CONFIG;
+  const CFG = window.SITE_CONFIG || window.FND_CONFIG;
+  const CLIENT = CFG.client;
   const sb = window.supabase.createClient(CFG.supabaseUrl, CFG.supabaseKey, { auth: { persistSession: true, autoRefreshToken: true } });
   window.__sb = sb;
   /* products with no store photo (e.g. new SKUs added by the daily refresh) show the logo instead of a broken image */
-  window.addEventListener('error', e => { const t = e.target; if (t && t.tagName === 'IMG' && !t.dataset.fb){ t.dataset.fb = '1'; t.src = 'brand/fnd_logo.png'; t.style.objectFit = 'contain'; t.style.padding = '18%'; t.alt = 'No photo in the store yet'; } }, true);
+  window.addEventListener('error', e => { const t = e.target; if (t && t.tagName === 'IMG' && !t.dataset.fb){ t.dataset.fb = '1'; t.src = CFG.fallbackLogo || 'brand/logo.png'; t.style.objectFit = 'contain'; t.style.padding = '18%'; t.alt = 'No photo in the store yet'; } }, true);
   const $g = id => document.getElementById(id);
   let me = null;            // { email, name, role }
 
@@ -15,7 +18,7 @@
   function gate(html){ $g('gateBody').innerHTML = html; $g('gate').hidden = false; }
   function gateMsg(t, bad){ const m = $g('gateMsg'); if (m){ m.textContent = t; m.style.color = bad ? '#E4002B' : '#555'; } }
   function showSignIn(note){
-    gate(`<h1>Merchandise Review</h1><p class="gsub">Floor &amp; Decor · prepared by CIC</p>
+    gate(`<h1>Merchandise Review</h1><p class="gsub">${esc(CFG.storeName || '')}${CFG.storeName ? ' · ' : ''}prepared by CIC</p>
       <form id="signin" autocomplete="on">
         <label>Email<input id="gEmail" type="email" required autocomplete="username"></label>
         <label>Password<input id="gPass" type="password" required autocomplete="current-password"></label>
@@ -35,20 +38,21 @@
     const { data: { user } } = await sb.auth.getUser();
     if (!user) return null;
     const email = (user.email || '').toLowerCase();
-    const { data, error } = await sb.from('allowed_users').select('email,name,role').eq('email', email).maybeSingle();
-    if (error || !data) return { email, name: '', role: null };
-    return { email, name: data.name || '', role: data.role };
+    const { data, error } = await sb.from('allowed_users').select('email,name,role,clients').eq('email', email).maybeSingle();
+    if (error || !data) return { email, name: '', role: null, clients: [] };
+    if (data.role !== 'admin' && !(data.clients || []).includes(CLIENT)) return { email, name: data.name || '', role: null, clients: data.clients || [] };
+    return { email, name: data.name || '', role: data.role, clients: data.clients || [] };
   }
 
   async function loadSite(){
-    const { data, error } = await sb.from('kv').select('id,data').eq('collection', 'site').eq('id', 'bundle').maybeSingle();
+    const { data, error } = await sb.from('kv').select('id,data').eq('client', CLIENT).eq('collection', 'site').eq('id', 'bundle').maybeSingle();
     if (error) throw error;
     return data ? data.data : null;
   }
 
   /* ---------- admin: import the private data file ---------- */
   function showImport(msg){
-    gate(`<h1>Load site data</h1><p class="gsub">Signed in as ${esc(me.email)} (admin)</p>
+    gate(`<h1>Load site data</h1><p class="gsub">Signed in as ${esc(me.email)} (admin) · ${esc(CLIENT)}</p>
       <p class="gmsg">${msg || 'Pick the INTERNAL ONLY site-data file CIC prepared. It loads the items, prices, current inventory and any saved decisions.'}</p>
       <input id="gFile" type="file" accept=".json,application/json">
       <button class="gbtn" id="gImport" type="button">Load data</button>
@@ -61,11 +65,11 @@
         gateMsg('Reading…');
         const bundle = JSON.parse(await f.text());
         const site = bundle.site || bundle;           // {WHY, ITEMS, CURRENT, ...}
-        const rows = [{ collection: 'site', id: 'bundle', data: site }];
-        for (const d of (bundle.docs || [])) rows.push({ collection: d.collection, id: d.id, data: d.data });
+        const rows = [{ collection: 'site', id: 'bundle', client: CLIENT, data: site }];
+        for (const d of (bundle.docs || [])) rows.push({ collection: d.collection, id: d.id, client: CLIENT, data: d.data });
         gateMsg('Uploading ' + rows.length + ' records…');
         for (let i = 0; i < rows.length; i += 50){
-          const { error } = await sb.from('kv').upsert(rows.slice(i, i + 50), { onConflict: 'collection,id' });
+          const { error } = await sb.from('kv').upsert(rows.slice(i, i + 50), { onConflict: 'client,collection,id' });
           if (error) throw error;
         }
         gateMsg('Loaded. Opening the site…'); setTimeout(() => location.reload(), 600);
@@ -77,7 +81,7 @@
   const listeners = {};      // collection -> [{next, err}]
   const lastSeen = {};       // collection -> ISO timestamp
   async function pull(coll, initial){
-    let q = sb.from('kv').select('id,data,updated_at').eq('collection', coll).order('updated_at', { ascending: true });
+    let q = sb.from('kv').select('id,data,updated_at').eq('client', CLIENT).eq('collection', coll).order('updated_at', { ascending: true });
     if (!initial && lastSeen[coll]) q = q.gt('updated_at', lastSeen[coll]);
     const { data, error } = await q;
     if (error){ (listeners[coll] || []).forEach(l => l.err && l.err({ code: 'unavailable', message: error.message })); return; }
@@ -97,17 +101,17 @@
       return {
         async set(data){
           if (coll === 'site') throw { code: 'invalid_argument', message: 'read only' };
-          const { error } = await sb.from('kv').upsert({ collection: coll, id, data }, { onConflict: 'collection,id' });
+          const { error } = await sb.from('kv').upsert({ collection: coll, id, client: CLIENT, data }, { onConflict: 'client,collection,id' });
           if (error) throw { code: /row-level security|permission/i.test(error.message) ? 'invalid_argument' : 'unavailable', message: error.message };
           setTimeout(() => pull(coll, false), 300);
         },
         async get(){
-          const { data, error } = await sb.from('kv').select('data').eq('collection', coll).eq('id', id).maybeSingle();
+          const { data, error } = await sb.from('kv').select('data').eq('client', CLIENT).eq('collection', coll).eq('id', id).maybeSingle();
           if (error) throw { code: 'unavailable', message: error.message };
           return { id, exists: !!data, data: () => data ? data.data : undefined };
         },
         async delete(){
-          const { error } = await sb.from('kv').delete().eq('collection', coll).eq('id', id);
+          const { error } = await sb.from('kv').delete().eq('client', CLIENT).eq('collection', coll).eq('id', id);
           if (error) throw { code: 'invalid_argument', message: error.message };
         }
       };
@@ -142,7 +146,7 @@
     gate('<p class="gmsg">Loading…</p>');
     me = await loadMe();
     if (!me){ showSignIn(); return; }
-    if (!me.role){ gate(`<h1>No access yet</h1><p class="gmsg">${esc(me.email)} is signed in but isn’t on the reviewer list. Ask CIC to add this email.</p><p class="gmsg"><a href="#" id="gOut">Sign out</a></p>`); $g('gOut').onclick = e => { e.preventDefault(); signOut(); }; return; }
+    if (!me.role){ gate(`<h1>No access yet</h1><p class="gmsg">${esc(me.email)} is signed in but isn’t on the reviewer list for this site. Ask CIC to add this email.</p><p class="gmsg"><a href="#" id="gOut">Sign out</a></p>`); $g('gOut').onclick = e => { e.preventDefault(); signOut(); }; return; }
     let site = null;
     try{ site = await loadSite(); }catch(e){ console.error(e); }
     if (!site){
